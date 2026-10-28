@@ -2,7 +2,7 @@
 namespace: cci_moc
 name: stateful_switches
 
-# Every push to main publishes this version to Galaxy if it is not published yet
+# The Release workflow publishes this version, bump it before every release
 version: 0.1.0
 
 readme: README.md
@@ -11,7 +11,8 @@ authors:
 description: >-
   Stateful configuration of Dell OS9, Cisco NXOS and NVIDIA Cumulus Linux (NVUE)
   switches from YAML interface and VLAN manifests
-license_file: LICENSE
+license:
+  - GPL-3.0-or-later
 tags:
   - networking
   - switch

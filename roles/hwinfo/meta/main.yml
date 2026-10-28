@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  author: hakasapl
+  description: Print the switch serial number
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.17"
+
+dependencies: []

@@ -4,8 +4,9 @@
 
 .vscode
 
-# ansible-galaxy collection build
+# ansible-galaxy collection build and galaxy-importer
 *.tar.gz
+build/
 
 # ansible-test
 tests/output

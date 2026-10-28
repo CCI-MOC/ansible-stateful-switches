@@ -212,15 +212,30 @@ The `pep8` sanity test is skipped because ruff checks style through
 [pre-commit](https://pre-commit.com) (`pre-commit install`), and pep8 rejects the
 column-aligned test tables.
 
+CI also runs Galaxy's importer on the built collection, which catches what Galaxy would
+reject on publish, such as a role without a `README.md`:
+
+```
+pip install galaxy-importer
+ansible-galaxy collection build --output-path build
+python -m galaxy_importer.main build/cci_moc-stateful_switches-*.tar.gz
+```
+
 ## Releasing
 
-Every push to `main` runs the tests and, if the `version` in `galaxy.yml` is not on
-Galaxy yet, publishes it and creates a `v<version>` GitHub release. To release, bump the
-version in `galaxy.yml` following [semantic versioning](https://semver.org).
+The `version` in `galaxy.yml` is the version that gets released. To release:
+
+1. Bump the version in `galaxy.yml` following [semantic versioning](https://semver.org),
+   add a section for it to `CHANGELOG.md`, and merge both to `main`.
+2. On GitHub, open **Actions → Release → Run workflow** and run it on `main`.
+
+The workflow runs the tests, publishes the collection to Galaxy, and creates a
+`v<version>` GitHub release. It stops before the tests if that version is already on
+Galaxy, because Galaxy never accepts the same version twice.
 
 Publishing needs a `GALAXY_API_KEY` repository secret with an API token from an owner of
 the `cci_moc` namespace on [Galaxy](https://galaxy.ansible.com/ui/token/).
 
 ## License
 
-GNU General Public License v3.0, see [LICENSE](LICENSE).
+GNU General Public License v3.0 or later (GPL-3.0-or-later), see [LICENSE](LICENSE).

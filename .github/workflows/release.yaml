@@ -1,0 +1,90 @@
+name: Release
+
+# Started by hand from the Actions tab. Publishes the version in galaxy.yml to Galaxy
+# and creates a v<version> GitHub release for it
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.14"
+  COLLECTION: cci_moc/stateful_switches
+
+jobs:
+  # Fails before the tests run when the release cannot be published anyway
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Check Branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Releases are made from main, not $GITHUB_REF_NAME"
+          exit 1
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Read Version
+        id: version
+        run: |
+          version=$(python -c 'import yaml; print(yaml.safe_load(open("galaxy.yml"))["version"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check Galaxy For This Version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          url="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index/$COLLECTION/versions/$VERSION/"
+          status=$(curl -s -o /dev/null -w '%{http_code}' "$url")
+          case "$status" in
+            404) echo "Version $VERSION is not on Galaxy yet" ;;
+            200) echo "::error::Version $VERSION is already on Galaxy, bump the version in galaxy.yml"; exit 1 ;;
+            *) echo "::error::Galaxy returned HTTP $status for $url"; exit 1 ;;
+          esac
+
+  tests:
+    needs: preflight
+    uses: ./.github/workflows/ci.yaml
+
+  publish:
+    needs: [preflight, tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.preflight.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install ansible-core
+        run: pip install ansible-core
+
+      - name: Build Collection
+        run: ansible-galaxy collection build
+
+      - name: Publish To Galaxy
+        env:
+          GALAXY_API_KEY: ${{ secrets.GALAXY_API_KEY }}
+        run: |
+          if [ -z "$GALAXY_API_KEY" ]; then
+            echo "::error::Add a GALAXY_API_KEY repository secret with an API token from https://galaxy.ansible.com/ui/token/"
+            exit 1
+          fi
+          ansible-galaxy collection publish "${COLLECTION/\//-}-$VERSION.tar.gz" --token "$GALAXY_API_KEY"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" "${COLLECTION/\//-}-$VERSION.tar.gz" \
+            --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes
