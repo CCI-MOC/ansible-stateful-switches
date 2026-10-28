@@ -1,0 +1,9 @@
+---
+- name: Gather serial number
+  cisco.nxos.nxos_facts:
+    gather_subset:
+      - min
+
+- name: Print serial number
+  ansible.builtin.debug:
+    msg: "{{ ansible_net_serialnum }}"

@@ -1,0 +1,4 @@
+---
+# Saves the applied configuration. Pending changes that were never applied are not saved
+- name: Save Config
+  ansible.builtin.raw: nv config save

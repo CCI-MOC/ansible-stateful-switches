@@ -1,0 +1,17 @@
+---
+# Releases before 5.11 show the serial number in "nv show platform hardware", later ones
+# in "nv show platform". 5.0 only takes the output option before the path
+- name: Gather serial number
+  ansible.builtin.raw: >-
+    nv show platform hardware -o json
+    || nv show --output json platform hardware
+    || nv show platform -o json
+  register: nvue_platform
+  changed_when: false
+  check_mode: false
+
+- name: Print serial number
+  vars:
+    nvue_platform_info: "{{ nvue_platform.stdout | from_json }}"
+  ansible.builtin.debug:
+    msg: "{{ nvue_platform_info['serial-number'] | default((nvue_platform_info.hardware | default({}))['serial-number'] | default('unknown')) }}"

@@ -3,6 +3,8 @@ argument_specs:
   main:
     short_description: Print the switch serial number
     description:
-      - Supports Dell OS9 (C(ansible_network_os=dellemc.os9.os9)). Hosts with any other
+      - Supports Dell OS9 (C(ansible_network_os=dellemc.os9.os9)), Cisco NXOS
+        (C(ansible_network_os=cisco.nxos.nxos)) and NVIDIA Cumulus Linux 5 through NVUE
+        (C(ansible_network_os=nvidia.nvue)). Hosts with any other
         C(ansible_network_os) are skipped.
     options: {}

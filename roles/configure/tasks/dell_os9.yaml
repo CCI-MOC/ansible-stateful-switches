@@ -13,19 +13,6 @@
       - hostname {{ inventory_hostname }}
   notify: Save Config
 
-- name: Enable SNMP
-  dellemc.os9.os9_config:
-    lines:
-      - snmp-server community public ro
-  notify: Save Config
-
-#- name: Enable LLDP
-#  dellemc.os9.os9_config:
-#    lines:
-#      - no disable
-#    parents: ["protocol lldp"]
-#  notify: Save Config
-
 # Gather the current output of "show running configuration" on the switch
 - name: Gather Current Configuration
   dellemc.os9.os9_facts:

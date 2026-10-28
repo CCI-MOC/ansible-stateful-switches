@@ -100,8 +100,8 @@ On NVUE switches, run with `-e diff_only=true` to see the changes without applyi
 | Role | Description |
 |------|-------------|
 | `configure` | Makes the switch match the `interfaces` and `vlans` manifests, then saves the configuration |
-| `save` | Saves the running configuration to the startup configuration (Dell OS9) |
-| `hwinfo` | Prints the switch serial number (Dell OS9) |
+| `save` | Saves the running configuration to the startup configuration |
+| `hwinfo` | Prints the switch serial number |
 
 Run `ansible-doc -t role cci_moc.stateful_switches.configure` for the role variables.
 
