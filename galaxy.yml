@@ -3,7 +3,7 @@ namespace: cci_moc
 name: stateful_switches
 
 # Every push to main publishes this version to Galaxy if it is not published yet
-version: 1.0.0
+version: 0.1.0
 
 readme: README.md
 authors:
