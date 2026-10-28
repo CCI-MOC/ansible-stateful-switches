@@ -1,0 +1,10 @@
+---
+- name: Gather serial number
+  dellemc.os9.os9_command:
+    commands:
+      - show inventory | grep "\* 1"
+  register: serial_number
+
+- name: Print serial number
+  ansible.builtin.debug:
+    msg: "{{ serial_number.stdout }}"

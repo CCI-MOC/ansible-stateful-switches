@@ -1,0 +1,50 @@
+---
+DOCUMENTATION:
+  name: filter_vlans
+  author: hakasapl (@hakasapl)
+  version_added: 1.0.0
+  short_description: Select the VLANs that belong on a host
+  description:
+    - Turns the VLAN manifest into a dictionary keyed by VLAN ID, keeping only the VLANs
+      whose C(fabrics) share at least one inventory group with O(cur_groups).
+    - VLANs without C(fabrics) are left out.
+    - Fails when two selected VLANs have the same ID.
+  positional: _input, cur_groups
+  options:
+    _input:
+      description:
+        - The VLAN manifest. Each VLAN has an C(id), C(name), C(description) and
+          C(fabrics), and optionally C(managed).
+      type: list
+      elements: dict
+      required: true
+    cur_groups:
+      description:
+        - The inventory groups of the host, usually C(group_names).
+      type: list
+      elements: string
+      required: true
+
+EXAMPLES: |
+  # vlans:
+  #   - id: 105
+  #     name: PUBLIC
+  #     description: Public VLAN
+  #     fabrics: [core]
+  #   - id: 200
+  #     name: STORAGE
+  #     description: Storage VLAN, created by hand
+  #     fabrics: [core, storage]
+  #     managed: true
+  vlans_host: "{{ vlans | cci_moc.stateful_switches.filter_vlans(group_names) }}"
+  # => {105: {"name": "PUBLIC", "description": "Public VLAN"},
+  #     200: {"name": "STORAGE", "description": "Storage VLAN, created by hand", "managed": true}}
+
+RETURN:
+  _value:
+    description:
+      - The selected VLANs, keyed by VLAN ID. Each value has C(name) and C(description),
+        and C(managed) when the manifest sets it.
+      - This is the O(cci_moc.stateful_switches.nvue_getconfig#filter:vlans) input of
+        the configuration filters.
+    type: dict

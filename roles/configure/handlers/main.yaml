@@ -1,0 +1,6 @@
+---
+# Included rather than imported, so that the role loads without dellemc.os9 on sites
+# without OS9 switches. Tasks notify this include by its name
+- name: Save Config
+  ansible.builtin.include_tasks: dell_os9.yaml
+  when: ansible_network_os == "dellemc.os9.os9"

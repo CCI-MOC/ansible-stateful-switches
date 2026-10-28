@@ -1,0 +1,62 @@
+---
+DOCUMENTATION:
+  name: nvue_getconfig
+  author: hakasapl (@hakasapl)
+  version_added: 1.0.0
+  short_description: Generate the NVUE commands that make a Cumulus Linux switch match the manifests
+  description:
+    - Returns the C(nv set) and C(nv unset) commands that make a Cumulus Linux 5 switch
+      match the interface and VLAN manifests.
+    - Every interface in the manifest without C(managed=true) is unset and rebuilt from
+      its manifest fields. Physical ports that are not in the manifest are left alone,
+      while bonds, SVIs, subinterfaces and tunnels that are not in it are removed.
+      Management interfaces (C(eth*), C(lo), C(mgmt)) and the C(peerlink) are never
+      changed.
+    - Bridge VLANs that are not in the VLAN manifest are removed. VLANs with
+      C(managed=true) are kept if they exist.
+    - Run the commands in one pending revision. C(nv config apply) then changes only
+      what differs from the applied configuration, so unchanged interfaces are not
+      touched.
+    - The commands follow the syntax of the release the switch runs. Fails when the
+      manifest has a field or value the release does not support.
+  positional: _input, interfaces, vlans, system
+  options:
+    _input:
+      description:
+        - The parsed output of C(nv config show -o json).
+      type: list
+      elements: dict
+      required: true
+    interfaces:
+      description:
+        - The interface manifest, keyed by interface name.
+      type: dict
+      required: true
+    vlans:
+      description:
+        - The VLANs of the host, as returned by
+          P(cci_moc.stateful_switches.filter_vlans#filter).
+      type: dict
+      required: true
+    system:
+      description:
+        - The parsed output of C(nv show system -o json), which has the release.
+        - Without it, the release is read from the header of O(_input), and 5.11 is
+          assumed if that has none.
+      type: dict
+
+EXAMPLES: |
+  - name: Generate the commands
+    vars:
+      nvue_applied_config: "{{ nvue_applied.stdout | from_json }}"
+      nvue_system_info: "{{ nvue_system.stdout | from_json }}"
+    ansible.builtin.set_fact:
+      nvue_commands: >-
+        {{ nvue_applied_config
+           | cci_moc.stateful_switches.nvue_getconfig(interfaces, vlans_host, nvue_system_info) }}
+
+RETURN:
+  _value:
+    description: C(nv set) and C(nv unset) commands, in the order to run them.
+    type: list
+    elements: string

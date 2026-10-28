@@ -1,0 +1,52 @@
+---
+DOCUMENTATION:
+  name: os9_getconfig
+  author: hakasapl (@hakasapl)
+  version_added: 1.0.0
+  short_description: Generate Dell OS9 interface and VLAN configuration from the manifests
+  description:
+    - Compares the running configuration of a Dell OS9 switch with the interface and
+      VLAN manifests, and returns the configuration blocks of the interfaces that need
+      changing.
+    - Interfaces and VLANs with C(managed=true) are left alone.
+  positional: _input, intf, vlans
+  options:
+    _input:
+      description:
+        - The registered result of M(dellemc.os9.os9_facts) with the C(config) subset.
+          The running configuration is read from its C(ansible_facts.ansible_net_config).
+      type: dict
+      required: true
+    intf:
+      description:
+        - The interface manifest, keyed by interface name.
+      type: dict
+      required: true
+    vlans:
+      description:
+        - The VLANs of the host, as returned by
+          P(cci_moc.stateful_switches.filter_vlans#filter).
+      type: dict
+      required: true
+
+EXAMPLES: |
+  - name: Gather the running configuration
+    dellemc.os9.os9_facts:
+      gather_subset:
+        - config
+    register: cur_config
+
+  - name: Apply the manifests
+    dellemc.os9.os9_config:
+      lines: "{{ item }}"
+      replace: block
+      match: none
+    loop: "{{ cur_config | cci_moc.stateful_switches.os9_getconfig(interfaces, vlans_host) }}"
+
+RETURN:
+  _value:
+    description:
+      - One list of OS9 commands per interface, starting with its C(interface) line.
+        Apply each with M(dellemc.os9.os9_config) and C(replace=block).
+    type: list
+    elements: list

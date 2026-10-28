@@ -1,0 +1,39 @@
+---
+DOCUMENTATION:
+  name: os9_fanoutcfg
+  author: hakasapl (@hakasapl)
+  version_added: 1.0.0
+  short_description: Generate Dell OS9 port fanout configuration from the manifest
+  description:
+    - Returns the C(stack-unit) commands that add the fanouts in the interface manifest
+      and remove the ones that are no longer in it.
+    - Apply these before P(cci_moc.stateful_switches.os9_getconfig#filter), and gather
+      the running configuration again in between, because fanouts create and delete
+      interfaces.
+  positional: _input, manifest
+  options:
+    _input:
+      description:
+        - The registered result of M(dellemc.os9.os9_facts) with the C(config) subset.
+      type: dict
+      required: true
+    manifest:
+      description:
+        - The interface manifest, keyed by interface name. Interfaces with a C(fanout)
+          field are fanned out.
+      type: dict
+      required: true
+
+EXAMPLES: |
+  - name: Apply fanout configuration
+    dellemc.os9.os9_config:
+      lines:
+        - "{{ item }}"
+      match: none
+    loop: "{{ cur_config | cci_moc.stateful_switches.os9_fanoutcfg(interfaces) }}"
+
+RETURN:
+  _value:
+    description: OS9 commands, applied one at a time.
+    type: list
+    elements: string

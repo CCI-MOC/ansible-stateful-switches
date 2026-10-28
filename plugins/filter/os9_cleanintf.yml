@@ -1,0 +1,43 @@
+---
+DOCUMENTATION:
+  name: os9_cleanintf
+  author: hakasapl (@hakasapl)
+  version_added: 1.0.0
+  short_description: Remove Dell OS9 VLAN interfaces and port channels that left the manifests
+  description:
+    - Returns the commands that delete, from the running configuration of a Dell OS9
+      switch, the VLAN interfaces whose VLAN is not in O(vlans) and the port channels
+      that are not in O(manifest).
+    - C(interface Vlan 1) is never deleted.
+  positional: _input, manifest, vlans
+  options:
+    _input:
+      description:
+        - The registered result of M(dellemc.os9.os9_facts) with the C(config) subset.
+      type: dict
+      required: true
+    manifest:
+      description:
+        - The interface manifest, keyed by interface name.
+      type: dict
+      required: true
+    vlans:
+      description:
+        - The VLANs of the host, as returned by
+          P(cci_moc.stateful_switches.filter_vlans#filter).
+      type: dict
+      required: true
+
+EXAMPLES: |
+  - name: Clean deleted interfaces
+    dellemc.os9.os9_config:
+      lines:
+        - "{{ item }}"
+      match: none
+    loop: "{{ cur_config | cci_moc.stateful_switches.os9_cleanintf(interfaces, vlans_host) }}"
+
+RETURN:
+  _value:
+    description: OS9 commands, one per interface to delete.
+    type: list
+    elements: string

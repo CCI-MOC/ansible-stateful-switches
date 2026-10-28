@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  PYTHON_VERSION: "3.14"
+  COLLECTION: cci_moc/stateful_switches
+
+jobs:
+  ansible-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        test: [units, sanity]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # ansible-test only runs from inside an ansible_collections/<namespace>/<name> path
+          path: ansible_collections/${{ env.COLLECTION }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install ansible-core
+        run: pip install ansible-core
+
+      - name: Unit Tests
+        if: matrix.test == 'units'
+        working-directory: ansible_collections/${{ env.COLLECTION }}
+        run: ansible-test units --venv --requirements --python "$PYTHON_VERSION"
+
+      # pep8 is skipped because ruff checks style in pre-commit, and pep8 rejects the
+      # column-aligned test tables
+      - name: Sanity Tests
+        if: matrix.test == 'sanity'
+        working-directory: ansible_collections/${{ env.COLLECTION }}
+        run: ansible-test sanity --venv --requirements --python "$PYTHON_VERSION" --skip-test pep8
+
+  # Publishes the galaxy.yml version to Galaxy and creates a GitHub release for it, once
+  # per version. Pushes that do not bump the version only run the tests
+  publish:
+    needs: ansible-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: publish
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install ansible-core
+        run: pip install ansible-core
+
+      - name: Read Version
+        id: version
+        run: |
+          version=$(python -c 'import yaml; print(yaml.safe_load(open("galaxy.yml"))["version"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "artifact=${COLLECTION/\//-}-$version.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Check Galaxy For This Version
+        id: galaxy
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          url="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index/$COLLECTION/versions/$VERSION/"
+          status=$(curl -s -o /dev/null -w '%{http_code}' "$url")
+          case "$status" in
+            200)
+              echo "published=true" >> "$GITHUB_OUTPUT"
+              echo "Version $VERSION is already on Galaxy, bump the version in galaxy.yml to publish"
+              ;;
+            404) echo "published=false" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::Galaxy returned HTTP $status for $url"; exit 1 ;;
+          esac
+
+      - name: Build Collection
+        if: steps.galaxy.outputs.published == 'false'
+        run: ansible-galaxy collection build
+
+      - name: Publish To Galaxy
+        if: steps.galaxy.outputs.published == 'false'
+        env:
+          GALAXY_API_KEY: ${{ secrets.GALAXY_API_KEY }}
+          ARTIFACT: ${{ steps.version.outputs.artifact }}
+        run: |
+          if [ -z "$GALAXY_API_KEY" ]; then
+            echo "::error::Add a GALAXY_API_KEY repository secret with an API token from https://galaxy.ansible.com/ui/token/"
+            exit 1
+          fi
+          ansible-galaxy collection publish "$ARTIFACT" --token "$GALAXY_API_KEY"
+
+      - name: Create GitHub Release
+        if: steps.galaxy.outputs.published == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          ARTIFACT: ${{ steps.version.outputs.artifact }}
+        run: gh release create "v$VERSION" "$ARTIFACT" --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes

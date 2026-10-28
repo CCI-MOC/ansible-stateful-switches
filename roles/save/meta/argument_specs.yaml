@@ -1,0 +1,8 @@
+---
+argument_specs:
+  main:
+    short_description: Save the running configuration to the startup configuration
+    description:
+      - Supports Dell OS9 (C(ansible_network_os=dellemc.os9.os9)). Hosts with any other
+        C(ansible_network_os) are skipped.
+    options: {}

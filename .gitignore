@@ -1,0 +1,11 @@
+**__pycache__
+
+**.DS_store
+
+.vscode
+
+# ansible-galaxy collection build
+*.tar.gz
+
+# ansible-test
+tests/output

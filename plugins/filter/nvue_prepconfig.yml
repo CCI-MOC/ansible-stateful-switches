@@ -1,0 +1,50 @@
+---
+DOCUMENTATION:
+  name: nvue_prepconfig
+  author: hakasapl (@hakasapl)
+  version_added: 1.0.0
+  short_description: Generate the NVUE commands that prepare a Cumulus Linux switch
+  description:
+    - Returns the C(nv set) commands for the hostname, the C(br_default) bridge, and
+      saving to the startup configuration on apply (Cumulus Linux 5.4 and later).
+    - The commands follow the syntax of the release the switch runs.
+  positional: _input, hostname, system
+  options:
+    _input:
+      description:
+        - The parsed output of C(nv config show -o json).
+      type: list
+      elements: dict
+      required: true
+    hostname:
+      description:
+        - The hostname to set.
+      type: string
+      required: true
+    system:
+      description:
+        - The parsed output of C(nv show system -o json), which has the release.
+        - Without it, the release is read from the header of O(_input), and 5.11 is
+          assumed if that has none.
+      type: dict
+
+EXAMPLES: |
+  - name: Gather system information
+    ansible.builtin.raw: nv show system -o json
+    register: nvue_system
+
+  - name: Gather applied configuration
+    ansible.builtin.raw: nv config show -o json
+    register: nvue_applied
+
+  - name: Generate the commands
+    ansible.builtin.set_fact:
+      nvue_commands: >-
+        {{ nvue_applied.stdout | from_json
+           | cci_moc.stateful_switches.nvue_prepconfig(inventory_hostname, nvue_system.stdout | from_json) }}
+
+RETURN:
+  _value:
+    description: C(nv set) commands.
+    type: list
+    elements: string

@@ -1,0 +1,67 @@
+---
+# Set Connection Parameters
+- name: Set Conn Parameters
+  dellemc.os9.os9_config:
+    lines:
+      - ip ssh connection-rate-limit 60
+  notify: Save Config
+
+# Set the hostname of the switch to the value in the hosts file
+- name: Set Hostname
+  dellemc.os9.os9_config:
+    lines:
+      - hostname {{ inventory_hostname }}
+  notify: Save Config
+
+- name: Enable SNMP
+  dellemc.os9.os9_config:
+    lines:
+      - snmp-server community public ro
+  notify: Save Config
+
+#- name: Enable LLDP
+#  dellemc.os9.os9_config:
+#    lines:
+#      - no disable
+#    parents: ["protocol lldp"]
+#  notify: Save Config
+
+# Gather the current output of "show running configuration" on the switch
+- name: Gather Current Configuration
+  dellemc.os9.os9_facts:
+    gather_subset:
+      - config
+  register: cur_config
+
+# Apply fanout config
+- name: Apply Fanout Configuration
+  dellemc.os9.os9_config:
+    lines:
+      - "{{ item }}"
+    match: none
+  loop: "{{ cur_config | cci_moc.stateful_switches.os9_fanoutcfg(interfaces) }}"
+  notify: Save Config
+
+# Gather the current output of "show running configuration" on the switch
+- name: Gather Current Configuration after Fanout Change
+  dellemc.os9.os9_facts:
+    gather_subset:
+      - config
+  register: cur_config
+
+# Apply manifest config (vlans and interfaces)
+- name: Apply Manifest Configuration
+  dellemc.os9.os9_config:
+    lines: "{{ item }}"
+    replace: block
+    match: none
+  loop: "{{ cur_config | cci_moc.stateful_switches.os9_getconfig(interfaces, vlans_host) }}"
+  notify: Save Config
+
+- name: Clean Deleted Interfaces
+  dellemc.os9.os9_config:
+    lines:
+      - "{{ item }}"
+    match: none
+  loop: "{{ cur_config | cci_moc.stateful_switches.os9_cleanintf(interfaces, vlans_host) }}"
+  notify: Save Config

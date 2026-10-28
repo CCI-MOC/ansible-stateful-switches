@@ -1,0 +1,48 @@
+---
+DOCUMENTATION:
+  name: nxos_getconfig
+  author: hakasapl (@hakasapl)
+  version_added: 1.0.0
+  short_description: Generate a Cisco NXOS configuration from the manifests
+  description:
+    - Combines the running configuration of a Cisco NXOS switch with the interface and
+      VLAN manifests, and returns the whole configuration the switch should have.
+    - The result is meant for C(configure replace), so lines for interfaces and VLANs
+      that are not in the manifests are removed. Interfaces and VLANs with
+      C(managed=true) keep their running configuration.
+  positional: _input, interfaces, vlans
+  options:
+    _input:
+      description:
+        - The running configuration, for example C(ansible_net_config) from
+          M(cisco.nxos.nxos_facts) with the C(config) subset.
+      type: string
+      required: true
+    interfaces:
+      description:
+        - The interface manifest, keyed by interface name.
+      type: dict
+      required: true
+    vlans:
+      description:
+        - The VLANs of the host, as returned by
+          P(cci_moc.stateful_switches.filter_vlans#filter).
+      type: dict
+      required: true
+
+EXAMPLES: |
+  - name: Gather the running configuration
+    cisco.nxos.nxos_facts:
+      gather_subset:
+        - config
+
+  - name: Write the new configuration to a file
+    delegate_to: localhost
+    ansible.builtin.copy:
+      content: "{{ ansible_net_config | cci_moc.stateful_switches.nxos_getconfig(interfaces, vlans_host) }}"
+      dest: /tmp/{{ inventory_hostname }}.cfg
+
+RETURN:
+  _value:
+    description: The complete NXOS configuration.
+    type: string

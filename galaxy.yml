@@ -1,0 +1,40 @@
+---
+namespace: cci_moc
+name: stateful_switches
+
+# Every push to main publishes this version to Galaxy if it is not published yet
+version: 1.0.0
+
+readme: README.md
+authors:
+  - hakasapl (https://github.com/hakasapl)
+description: >-
+  Stateful configuration of Dell OS9, Cisco NXOS and NVIDIA Cumulus Linux (NVUE)
+  switches from YAML interface and VLAN manifests
+license_file: LICENSE
+tags:
+  - networking
+  - switch
+  - dell
+  - os9
+  - cisco
+  - nxos
+  - nvidia
+  - cumulus
+  - nvue
+
+# Each switch OS needs its own collection, see the README. They are not
+# dependencies so that, for example, an NVUE-only site does not install dellemc.os9
+dependencies: {}
+
+repository: https://github.com/CCI-MOC/ansible-stateful-switches
+issues: https://github.com/CCI-MOC/ansible-stateful-switches/issues
+
+build_ignore:
+  - .github
+  - .gitignore
+  - .pre-commit-config.yaml
+  - .yamllint.yaml
+  - .ruff_cache
+  - "*.tar.gz"
+  - tests/output
