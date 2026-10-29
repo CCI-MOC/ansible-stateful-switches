@@ -3,7 +3,7 @@ namespace: cci_moc
 name: stateful_switches
 
 # The Release workflow publishes this version, bump it before every release
-version: 0.2.0
+version: 0.2.1
 
 readme: README.md
 authors:
