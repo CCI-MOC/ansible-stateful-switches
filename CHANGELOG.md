@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- Fixed old breakout port handling for Cumulus driver
+
 ## 0.2.0
 
 - Configure roles are more generic
