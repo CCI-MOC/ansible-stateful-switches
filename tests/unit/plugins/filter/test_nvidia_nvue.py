@@ -1158,9 +1158,9 @@ def test_NVUE_GETCONFIG(applied_config, vlans):
     assert res == [
         # 30 and 41 are not in the manifest, managed 40 exists and stays
         "nv unset bridge domain br_default vlan 30,41",
-        # manifest interfaces, then bond3 and vlan30, which are not in the manifest.
-        # swp5s2-3 are physical ports, so they are left alone
-        "nv unset interface swp1,swp2,swp5,swp5s0,swp5s1,bond1,vlan10,bond3,vlan30",
+        # manifest interfaces, then bond3 and vlan30, which are not in the manifest,
+        # and swp5s2-3, which the dual fanout no longer creates
+        "nv unset interface swp1,swp2,swp5,swp5s0,swp5s1,bond1,vlan10,bond3,swp5s2,swp5s3,vlan30",
         "nv set bridge domain br_default vlan 10,20",
         "nv set interface swp1,swp2,swp5,swp5s0,swp5s1,swp6 type swp",
         "nv set interface bond1 type bond",
@@ -1444,12 +1444,41 @@ def test_NVUE_GETCONFIG_fanout_single(applied_config, vlans):
     assert "nv set interface swp5 link speed 40G" in res
 
 
-def test_NVUE_GETCONFIG_fanout_removed(applied_config, vlans):
-    # swp5 no longer breaks out, its child ports are physical ports that are not in
-    # the manifest, so they stay
-    res = nvidia_nvue.NVUE_GETCONFIG(applied_config, {"swp5": {"state": "up"}}, vlans)
-    assert unsetInterfaces("swp5") in res
-    assert not any("swp5s" in cmd for cmd in res)
+@pytest.mark.parametrize("fields", [{"state": "up"}, {"fanout": {"type": "single"}}])
+def test_NVUE_GETCONFIG_fanout_removed(applied_config, vlans, fields):
+    # swp5 no longer breaks out, so its child ports go with the breakout, NVUE
+    # rejects a child port whose parent is not broken out
+    res = nvidia_nvue.NVUE_GETCONFIG(applied_config, {"swp5": fields}, vlans)
+    assert (
+        "nv unset interface swp5,bond1,bond3,swp5s0,swp5s1,swp5s2,swp5s3,vlan10,vlan30"
+        in res
+    )
+    assert not any(cmd.startswith("nv set interface swp5s") for cmd in res)
+
+
+def test_NVUE_GETCONFIG_fanout_reduced(applied_config, vlans):
+    # swp5 goes from 4x to 2x, the child ports the dual fanout does not create go
+    interfaces = {
+        "swp5": {"fanout": {"type": "dual", "speed": "50G"}},
+        "swp5s0": {},
+        "swp5s1": {},
+    }
+    res = nvidia_nvue.NVUE_GETCONFIG(applied_config, interfaces, vlans)
+    assert (
+        "nv unset interface swp5,swp5s0,swp5s1,bond1,bond3,swp5s2,swp5s3,vlan10,vlan30"
+        in res
+    )
+    assert "nv set interface swp5 link breakout 2x" in res
+    assert not any(
+        "swp5s2" in cmd or "swp5s3" in cmd for cmd in res if cmd.startswith("nv set")
+    )
+
+
+def test_NVUE_GETCONFIG_fanout_managed_parent(applied_config, vlans):
+    # a managed parent keeps its breakout, so its child ports stay
+    res = nvidia_nvue.NVUE_GETCONFIG(applied_config, {"swp5": {"managed": True}}, vlans)
+    assert unsetInterfaces() in res
+    assert not any("swp5" in cmd for cmd in res)
 
 
 def test_NVUE_GETCONFIG_fanout_51(applied_config, vlans):

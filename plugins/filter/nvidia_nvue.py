@@ -975,7 +975,8 @@ def NVUE_GETCONFIG(applied, interfaces, vlans, system=None):
     This is the main method that generates the NVUE commands which make the switch
     match the manifest. Every unmanaged interface in the manifest is unset and rebuilt
     from its manifest fields. Physical ports that are not in the manifest are left
-    alone, while bonds, SVIs, subinterfaces and tunnels that are not in it are removed.
+    alone, except breakout ports that their rebuilt parent no longer creates, while
+    bonds, SVIs, subinterfaces and tunnels that are not in it are removed.
     Bridge vlans that are not in the vlan manifest are removed (managed vlans are
     kept if they exist). NVUE stages everything in one pending revision and
     applies only the difference, so unchanged interfaces are not touched
@@ -1075,18 +1076,23 @@ def NVUE_GETCONFIG(applied, interfaces, vlans, system=None):
 
     # Unmanaged manifest interfaces are rebuilt from scratch. Of the interfaces that
     # are not in the manifest, bonds, SVIs, subinterfaces and tunnels are removed
-    # and physical ports are left alone
-    unset_intfs = [
-        intf
-        for intf, fields in interfaces.items()
-        if not fields.get("managed") and intf in applied_interfaces
+    # and physical ports are left alone. The exception is a breakout port of a
+    # rebuilt parent: the manifest lists every port a fanout creates, so the rebuilt
+    # parent no longer breaks out into it, and NVUE rejects a child of a port that
+    # is not broken out
+    rebuilt_intfs = [
+        intf for intf, fields in interfaces.items() if not fields.get("managed")
     ]
+    unset_intfs = [intf for intf in rebuilt_intfs if intf in applied_interfaces]
     unset_intfs += [
         intf
         for intf, intf_cfg in applied_interfaces.items()
         if intf not in interfaces
         and not isProtected(intf)
-        and intf_cfg.get("type") in REMOVABLE_INTERFACE_TYPES
+        and (
+            intf_cfg.get("type") in REMOVABLE_INTERFACE_TYPES
+            or getFanoutParent(intf) in rebuilt_intfs
+        )
     ]
     if unset_intfs:
         out.append(f"nv unset interface {','.join(unset_intfs)}")
