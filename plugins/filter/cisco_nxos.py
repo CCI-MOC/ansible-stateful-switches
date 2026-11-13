@@ -3,11 +3,13 @@ import re
 
 def getVLANList(config: str):
     """
-    Parses vlan ranges in config files. For example, vlan 5-8,10,15-17 will return [5,6,7,8,10,15,16,17]
+    Parses the VLAN range line in a config. For example, vlan 5-8,10,15-17 will return
+    ["5","6","7","8","10","15","16","17"]
+    Only the first line starting with "vlan " is parsed, since NXOS lists every VLAN on that line
 
     :param config: The config string block to parse the VLAN block for
     :type config: str
-    :return: A list of VLAN IDs
+    :return: A list of VLAN IDs, as strings
     :rtype: list
     """
     config = config.splitlines()
@@ -37,7 +39,13 @@ def getVLANList(config: str):
 def removeOldLines(config: str, interfaces: dict, vlans: dict):
     """
     This method will take a NXOS config block and remove all the lines that should be overwritten by the ansible generated config
-    This includes any interface block defined in the config that is in the manifest, except those with "managed": true in the manifest
+    This includes:
+    - every Ethernet, port-channel and Vlan interface block, except those with "managed": true in the interfaces manifest
+    - the VLAN range line (the first line starting with "vlan ")
+    - every "vlan <id>" block, except those with "managed": true in the VLANs manifest
+    - "interface breakout" lines for ports that are in the interfaces manifest
+    - comment lines starting with "!"
+    Other interfaces, such as mgmt0, are kept
 
     Example:
 
@@ -79,10 +87,10 @@ def removeOldLines(config: str, interfaces: dict, vlans: dict):
     :type config: str
     :param interfaces: The interfaces manifest
     :type interfaces: dict
-    :param vlans: The VLANs manifest
+    :param vlans: The VLANs manifest, keyed by VLAN ID
     :type vlans: dict
-    :return: The existing running config without lines that are maintained by ansible manifest
-    :rtype: str
+    :return: The lines of the existing running config, without lines that are maintained by the ansible manifest
+    :rtype: list
     """
     config = config.splitlines()
     new_config = []
@@ -167,6 +175,15 @@ def removeOldLines(config: str, interfaces: dict, vlans: dict):
 
 
 def generateVLANConfig(vlans: dict):
+    """
+    Generates the "vlan <id>" blocks with the VLAN names from the VLANs manifest
+    VLANs with "managed": true are skipped, since their running config is kept
+
+    :param vlans: The VLANs manifest, keyed by VLAN ID
+    :type vlans: dict
+    :return: The generated NXOS config lines
+    :rtype: list
+    """
     config = []
     for id, fields in vlans.items():
         if fields.get("managed"):
@@ -181,16 +198,25 @@ def generateVLANConfig(vlans: dict):
 
 def generateINTFConfig(interfaces: dict):
     """
-    This is the main method that generates the cisco NXOS config from the interface manifest
+    Generates the cisco NXOS interface config from the interface manifest, including breakout lines for fanout ports
     The output is ONLY the lines generated from the manifest, which needs to be combined with the existing running config
 
     :param interfaces: The interfaces manifest
     :type interfaces: dict
-    :return: The generated NXOS config
+    :return: The generated NXOS config lines
     :rtype: list
     """
 
     def getLAGMembers(fields: dict):
+        """
+        Gets the member ports of a port channel from its manifest fields
+        This combines the "lag-members", "lacp-members-active" and "lacp-members-passive" fields
+
+        :param fields: Manifest fields of the port channel
+        :type fields: dict
+        :return: The interface lines of the member ports, such as "interface Ethernet1/1"
+        :rtype: list
+        """
         members = []
         if "lag-members" in fields:
             members += fields["lag-members"]
