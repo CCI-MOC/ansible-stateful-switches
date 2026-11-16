@@ -14,6 +14,19 @@ lag_interface_types = ["port-channel"]
 
 
 def OS9_PARSEINTFRANGE(s, sw_config):
+    """
+    Expands an OS9 interface range into a list of interfaces
+    For example, "TenGigabitEthernet 1/1-1/3,1/5" will return
+    ["TenGigabitEthernet 1/1","TenGigabitEthernet 1/2","TenGigabitEthernet 1/3","TenGigabitEthernet 1/5"]
+    A range is expanded to every interface in the switch config from its first to its last interface, in config order
+
+    :param s: Interface type followed by a comma separated list of interfaces and ranges
+    :type s: str
+    :param sw_config: Switch configuration lines
+    :type sw_config: list
+    :return: List of interface labels
+    :rtype: list
+    """
     output = []  # output list will store all interfaces in the range
 
     s_parts = s.split(" ")  # Split input string into type and range parts
@@ -50,6 +63,18 @@ def OS9_PARSEINTFRANGE(s, sw_config):
 
 
 def OS9_GETEXTENDEDCFG(sw_config):
+    """
+    Expands the interface ranges in the switch config, so each interface is on its own line
+    This applies to "untagged", "tagged" and "channel-member" lines, and keeps their indentation
+    For example, " tagged TenGigabitEthernet 1/1-1/2" becomes
+    " tagged TenGigabitEthernet 1/1" and " tagged TenGigabitEthernet 1/2"
+    Comment lines starting with "!" are removed
+
+    :param sw_config: Switch configuration lines
+    :type sw_config: list
+    :return: Switch configuration lines with the interface ranges expanded
+    :rtype: list
+    """
     output = []
 
     for line in sw_config:
@@ -76,6 +101,16 @@ def OS9_GETEXTENDEDCFG(sw_config):
 
 
 def OS9_GETINTFCONFIG(intf, sw_config):
+    """
+    Gets the config of a single interface from the switch config
+
+    :param intf: Name of the interface, such as "Vlan 100"
+    :type intf: str
+    :param sw_config: Switch configuration lines
+    :type sw_config: list
+    :return: The lines below the interface without leading spaces, or an empty list if the interface is not in the config
+    :rtype: list
+    """
     output = []
 
     search_label = f"interface {intf}"
@@ -108,27 +143,33 @@ def OS9_GENERATEINTFCONFIG(
     :param intf_label: Name of interface
     :type intf_label: str
     :param intf_fields: Fields from manifest of interface
-    :type intf_fields: str
+    :type intf_fields: dict
     :param sw_config: Switch configuration lines
     :type sw_config: list
-    :return list of os9 commands:
-    :rtype: list
+    :param managed_vlan_list: IDs of VLANs that are managed, as strings
+    :type managed_vlan_list: list
+    :param unmanaged_vlan_list: IDs of VLANs that are not managed, as strings
+    :type unmanaged_vlan_list: list
+    :param default_list: Interfaces that are being defaulted so far
+    :type default_list: list
+    :return: Tuple of <list of OS9 command lists, one per interface block>,<default_list with this interface added if it is being defaulted>
+    :rtype: tuple
     """
 
     def os9_searchconfig(sw_config, search_keys, line_keys, intf_search):
         """
         Searches through config lines for specific subitem "line keys" from parent "search keys"
-        This is useful for finding existing VLAN/LACP mappins since OS9 does it backwards
+        This is useful for finding existing VLAN/LACP mappings since OS9 does it backwards
 
         :param sw_config: Switch configuration lines
         :type sw_config: list
-        :param search_keys: List of parent keys to find in the config
+        :param search_keys: Interface types of the parents to find in the config, such as "vlan" (matched case-insensitively)
         :type search_keys: list
-        :param line_keys: List of subitem items to find below the parent (no leading spaces)
+        :param line_keys: Prefixes of the subitem lines to find below the parent (no leading spaces)
         :type line_keys: list
-        :param intf_search: name of interface to match
+        :param intf_search: name of interface the subitem line must reference
         :type intf_search: str
-        :return: List of parents found that match a all keys
+        :return: List of parent interface labels (such as "Vlan 100") that have a matching subitem line
         :rtype: list
         """
         out = []
@@ -425,6 +466,19 @@ def OS9_GENERATEINTFCONFIG(
         return out
 
     def os9_stp(man_fields, running_fields, default_port):
+        """
+        Create OS9 commands for "stp" attribute
+        Edge port, BPDU guard, root guard and loop guard are set for each of the rstp, pvst and mstp protocols
+
+        :param man_fields: Manifest fields for current interface
+        :type man_fields: dict
+        :param running_fields: Interface attributes in the running config
+        :type running_fields: list
+        :param default_port: If true, this port is being defaulted
+        :type default_port: boolean
+        :return: List of OS9 commands to set stp
+        :rtype: list
+        """
         out = []
 
         os9_stp_types = ["rstp", "pvst", "mstp"]
@@ -554,12 +608,14 @@ def OS9_GENERATEINTFCONFIG(
 
     def getTaggedVlanList(tagList, unmanaged_vlan_list):
         """
-        The manifest allows tagged vlans to be specified as a range like 1000:1010
+        The manifest allows tagged vlans to be specified as a range like 1000:1010, or as "all"
         This method parses that
 
-        :param tagList: String to be parsed
-        :type tagList: str
-        :return: List of each vlan in the list
+        :param tagList: List of VLAN IDs and ranges to be parsed, or "all" for every unmanaged VLAN
+        :type tagList: list or str
+        :param unmanaged_vlan_list: IDs of VLANs that are not managed, returned when tagList is "all"
+        :type unmanaged_vlan_list: list
+        :return: List of each vlan ID in the list, as strings
         :rtype: list
         """
 
@@ -590,21 +646,24 @@ def OS9_GENERATEINTFCONFIG(
         vlan_mode,
     ):
         """
-        Create OS9 commands for cleaning vlans
+        Create OS9 commands that remove this interface from VLANs it should no longer be a member of
+        Managed VLANs are left alone, and nothing is returned if the port is being defaulted
 
         :param intf_label: Label of the interface
-        :type: str
+        :type intf_label: str
         :param sw_config: Switch config lines
-        :type: list
+        :type sw_config: list
         :param man_fields: Manifest fields for current interface
         :type man_fields: dict
-        :param defaulted: If true, this interface is defaulted before executing
-        :type defaulted: boolean
         :param default_port: If true, this port is being defaulted
         :type default_port: boolean
         :param managed_vlan_list: List of VLANs that are managed
         :type managed_vlan_list: list
-        :return: List of OS9 commands to set clean vlans
+        :param unmanaged_vlan_list: List of VLANs that are not managed, used when "tagged" is "all"
+        :type unmanaged_vlan_list: list
+        :param vlan_mode: Membership to clean, either "tagged" or "untagged"
+        :type vlan_mode: str
+        :return: List of OS9 command lists, one per VLAN interface to clean
         :rtype: list
         """
 
@@ -643,16 +702,14 @@ def OS9_GENERATEINTFCONFIG(
         Create OS9 commands for "untagged" attribute
 
         :param intf_label: Label of the interface
-        :type: str
+        :type intf_label: str
         :param sw_config: Switch config lines
-        :type: list
+        :type sw_config: list
         :param man_fields: Manifest fields for current interface
         :type man_fields: dict
-        :param defaulted: If true, this interface is defaulted before executing
-        :type defaulted: boolean
         :param default_port: If true, this port is being defaulted
         :type default_port: boolean
-        :return: List of OS9 commands to set untagged
+        :return: List of OS9 command lists to set untagged, one per VLAN interface
         :rtype: list
         """
 
@@ -681,16 +738,16 @@ def OS9_GENERATEINTFCONFIG(
         Create OS9 commands for "tagged" attribute
 
         :param intf_label: Label of the interface
-        :type: str
+        :type intf_label: str
         :param sw_config: Switch config lines
-        :type: list
+        :type sw_config: list
         :param man_fields: Manifest fields for current interface
         :type man_fields: dict
-        :param defaulted: If true, this interface is defaulted before executing
-        :type defaulted: boolean
         :param default_port: If true, this port is being defaulted
         :type default_port: boolean
-        :return: List of OS9 commands to set tagged
+        :param unmanaged_vlan_list: List of VLANs that are not managed, used when "tagged" is "all"
+        :type unmanaged_vlan_list: list
+        :return: List of OS9 command lists to set tagged, one per VLAN interface
         :rtype: list
         """
 
@@ -755,15 +812,18 @@ def OS9_GENERATEINTFCONFIG(
 
     def os9_cleanlacpmembers(intf_label, sw_config, man_fields, default_list):
         """
-        Removed LACP config from ports that need it
+        Create OS9 commands that remove LACP config from physical ports that are no longer
+        LACP members of this port channel
 
         :param intf_label: Label of the interface
-        :type: str
+        :type intf_label: str
         :param sw_config: Switch config lines
-        :type: list
+        :type sw_config: list
         :param man_fields: Manifest fields for current interface
         :type man_fields: dict
-        :return: List of OS9 commands to clean LACP interfaces
+        :param default_list: Interfaces that are being defaulted, which are skipped
+        :type default_list: list
+        :return: List of OS9 command lists to clean LACP interfaces, one per member port
         :rtype: list
         """
 
@@ -797,15 +857,15 @@ def OS9_GENERATEINTFCONFIG(
 
     def os9_lacpmembersactive(intf_label, sw_config, man_fields):
         """
-        Create OS9 commands for "lag-members-active" attribute
+        Create OS9 commands for "lacp-members-active" attribute
 
         :param intf_label: Label of the interface
-        :type: str
+        :type intf_label: str
         :param sw_config: Switch config lines
-        :type: list
+        :type sw_config: list
         :param man_fields: Manifest fields for current interface
         :type man_fields: dict
-        :return: List of OS9 commands to set lag-members-active
+        :return: List of OS9 command lists to set lacp-members-active, one per member port
         :rtype: list
         """
 
@@ -831,15 +891,15 @@ def OS9_GENERATEINTFCONFIG(
 
     def os9_lacpmemberspassive(intf_label, sw_config, man_fields):
         """
-        Create OS9 commands for "lag-members-passive" attribute
+        Create OS9 commands for "lacp-members-passive" attribute
 
         :param intf_label: Label of the interface
-        :type: str
+        :type intf_label: str
         :param sw_config: Switch config lines
-        :type: list
+        :type sw_config: list
         :param man_fields: Manifest fields for current interface
         :type man_fields: dict
-        :return: List of OS9 commands to set lag-members-passive
+        :return: List of OS9 command lists to set lacp-members-passive, one per member port
         :rtype: list
         """
 
@@ -1073,11 +1133,11 @@ def OS9_GENERATEINTFCONFIG(
 
 def OS9_FANOUTCFG(sw_config, manifest):
     """
-    This method will create OS9 commands for fanout interfaces
+    This method will create OS9 commands to add and remove fanout interfaces
 
-    :param sw_config: Switch configuration
-    :type sw_config: str
-    :param manifest: YAML manifest
+    :param sw_config: Registered result of os9_facts, the config is read from ansible_facts.ansible_net_config
+    :type sw_config: dict
+    :param manifest: Interface manifest from YAML
     :type manifest: dict
     :return: List of OS9 commands
     :rtype: list
@@ -1150,10 +1210,11 @@ def OS9_CLEANINTF(sw_config, manifest, vlans):
     """
     This method will create os9 commands to delete interfaces that have been removed from the manifest
     This can happen when a vlan interface or a port channel is deleted
+    Vlan 1 is never deleted
 
-    :param sw_config: existing switch config
-    :type sw_config: str
-    :param manifst: interface manifest from YAML
+    :param sw_config: Registered result of os9_facts, the config is read from ansible_facts.ansible_net_config
+    :type sw_config: dict
+    :param manifest: interface manifest from YAML
     :type manifest: dict
     :param vlans: vlan manifest from YAML
     :type vlans: dict
@@ -1195,14 +1256,15 @@ def OS9_CLEANINTF(sw_config, manifest, vlans):
 def OS9_GETCONFIG(sw_config, intf, vlans):
     """
     Main method which returns a 2d list of commands, where each nested list is an interface
+    Fanout interfaces and interfaces or VLANs with "managed": true are skipped
 
-    :param sw_config: Running switch config
-    :type sw_config: str
-    :param manifest: YAML manifest
-    :type manifest: dict
-    :param type: Type of manifest (vlan or intf)
-    :type type: str
-    :return: 2D List os os9 commands
+    :param sw_config: Registered result of os9_facts, the config is read from ansible_facts.ansible_net_config
+    :type sw_config: dict
+    :param intf: Interface manifest from YAML
+    :type intf: dict
+    :param vlans: VLAN manifest from YAML, keyed by VLAN ID
+    :type vlans: dict
+    :return: 2D List of os9 commands
     :rtype: list
     """
 
